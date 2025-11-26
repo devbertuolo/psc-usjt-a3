@@ -11,6 +11,9 @@ public class Recurso {
     private double notaMedia;
     private int idUsuarioCadastro;
     private Date dataCadastro;
+    private String status;
+    private String tipoRecurso;
+    private String conteudo;
     
     public Recurso() {}
     
@@ -37,4 +40,13 @@ public class Recurso {
     
     public Date getDataCadastro() { return dataCadastro; }
     public void setDataCadastro(Date dataCadastro) { this.dataCadastro = dataCadastro; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getTipoRecurso() { return tipoRecurso; }
+    public void setTipoRecurso(String tipoRecurso) { this.tipoRecurso = tipoRecurso; }
+
+    public String getConteudo() { return conteudo; }
+    public void setConteudo(String conteudo) { this.conteudo = conteudo; }
 }

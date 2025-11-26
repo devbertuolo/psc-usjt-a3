@@ -4,7 +4,9 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout; 
+import java.awt.Insets;
 import java.beans.PropertyVetoException;
 import java.util.List;
 
@@ -24,9 +26,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
 
-import iacibersec.dao.CategoriaDAO;
 import iacibersec.dao.RecursoDAO;
-import iacibersec.models.Categoria;
 import iacibersec.models.Recurso;
 import iacibersec.models.Usuario;
 
@@ -83,36 +83,67 @@ public class MainFrame extends JFrame {
         desktopPane.removeAll();
         desktopPane.repaint();
 
-        dashboardPanel = criarDashboardPanel(); 
+        dashboardPanel = criarDashboardCentral(); 
         dashboardPanel.setBounds(0, 0, desktopPane.getWidth(), desktopPane.getHeight());
         
         desktopPane.add(dashboardPanel, JLayeredPane.DEFAULT_LAYER);
         desktopPane.revalidate();
     }
-    
-    private JPanel criarDashboardPanel() {
-        JPanel mainPanel = new JPanel(new BorderLayout());
-        mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
-        JLabel welcomeLabel = new JLabel("PAINEL DE CURADORIA: PRINCIPAIS RECURSOS POR ÁREA", SwingConstants.CENTER);
+    private JPanel criarDashboardCentral() {
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        
+        JLabel welcomeLabel = new JLabel("SELECIONE UMA OPÇÃO ABAIXO", SwingConstants.CENTER);
         welcomeLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
         mainPanel.add(welcomeLabel, BorderLayout.NORTH);
 
-        JPanel gridPanel = new JPanel(new GridLayout(1, 3, 20, 20));
-        gridPanel.setBorder(BorderFactory.createEmptyBorder(20, 0, 0, 0));
-
-        RecursoDAO dao = new RecursoDAO();
-        CategoriaDAO catDao = new CategoriaDAO();
+        JPanel botoesPanel = new JPanel(new GridBagLayout());
         
-        List<Categoria> categorias = catDao.listarTodas();
-        
-        for (Categoria cat : categorias) {
-            gridPanel.add(criarListaTopRecursos(dao, cat.getId(), cat.getNome()));
+        if ("Administrador".equals(usuarioLogado.getTipo())) {
+            adicionarBotoesAdmin(botoesPanel);
+        } else if ("Comum".equals(usuarioLogado.getTipo())) {
+            adicionarBotoesComum(botoesPanel);
         }
 
-        mainPanel.add(gridPanel, BorderLayout.CENTER);
-        
+        mainPanel.add(botoesPanel, BorderLayout.CENTER);
         return mainPanel;
+    }
+    
+    private void adicionarBotoesAdmin(JPanel painel) {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(15, 15, 15, 15);
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.ipadx = 50;
+        gbc.ipady = 30;
+        
+        JButton btnUsuarios = new JButton("Gerenciar Usuários");
+        btnUsuarios.addActionListener(e -> abrirInternalFrame("Gestão de Usuários", new GestaoUsuariosPanel(), 750, 600));
+        gbc.gridx = 0; gbc.gridy = 0; painel.add(btnUsuarios, gbc);
+
+        JButton btnVerificacao = new JButton("Verificar Recursos");
+
+        btnVerificacao.addActionListener(e -> abrirInternalFrame("Verificação de Recursos", new VerificacaoPanel(), 850, 600)); 
+        gbc.gridx = 1; gbc.gridy = 0; painel.add(btnVerificacao, gbc);
+        
+        JButton btnListagem = new JButton("Visualizar Recursos");
+        btnListagem.addActionListener(e -> abrirInternalFrame("Listagem de Recursos", new ListagemRecursosPanel(usuarioLogado), 900, 550));
+        gbc.gridx = 2; gbc.gridy = 0; painel.add(btnListagem, gbc);
+    }
+
+    private void adicionarBotoesComum(JPanel painel) {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(15, 15, 15, 15);
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.ipadx = 50;
+        gbc.ipady = 30;
+        
+        JButton btnCadastro = new JButton("Cadastrar Novo Recurso");
+        btnCadastro.addActionListener(e -> abrirInternalFrame("Cadastrar Recurso", new CadastroRecursoPanel(usuarioLogado), 500, 350));
+        gbc.gridx = 0; gbc.gridy = 0; painel.add(btnCadastro, gbc);
+        
+        JButton btnListagem = new JButton("Visualizar Recursos");
+        btnListagem.addActionListener(e -> abrirInternalFrame("Listagem de Recursos", new ListagemRecursosPanel(usuarioLogado), 900, 550));
+        gbc.gridx = 1; gbc.gridy = 0; painel.add(btnListagem, gbc);
     }
 
     private JPanel criarListaTopRecursos(RecursoDAO dao, int idCategoria, String titulo) {

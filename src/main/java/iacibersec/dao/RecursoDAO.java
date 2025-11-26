@@ -13,7 +13,7 @@ import iacibersec.models.Recurso;
 public class RecursoDAO {
 
     public boolean cadastrar(Recurso recurso) {
-        String sql = "INSERT INTO Recursos (titulo, autor, id_categoria, id_usuario_cadastro) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO Recursos (titulo, autor, id_categoria, id_usuario_cadastro, tipo_recurso, conteudo_link_ou_base64, status) VALUES (?, ?, ?, ?, ?, ?, 'Pendente')";
         
         try (Connection conn = ConexaoDAO.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -22,6 +22,8 @@ public class RecursoDAO {
             stmt.setString(2, recurso.getAutor());
             stmt.setInt(3, recurso.getIdCategoria());
             stmt.setInt(4, recurso.getIdUsuarioCadastro());
+            stmt.setString(5, recurso.getTipoRecurso());
+            stmt.setString(6, recurso.getConteudo());
             
             return stmt.executeUpdate() > 0;
             
@@ -152,4 +154,59 @@ public class RecursoDAO {
             return false;
         }
     }
+
+    public boolean atualizarStatus(int idRecurso, String novoStatus) {
+        String sql = "UPDATE Recursos SET status = ? WHERE id = ?";
+        
+        try (Connection conn = ConexaoDAO.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, novoStatus); // Ex: "Verificado" ou "Rejeitado"
+            stmt.setInt(2, idRecurso);
+            
+            return stmt.executeUpdate() > 0;
+            
+        } catch (SQLException e) {
+            System.err.println("Erro ao atualizar status do recurso: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public List<Recurso> listarRecursosPorStatus(String status) {
+        List<Recurso> recursos = new ArrayList<>();
+        
+        String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, r.id_categoria, r.id_usuario_cadastro, r.tipo_recurso, r.conteudo_link_ou_base64 " +
+                    "FROM Recursos r JOIN Categorias c ON r.id_categoria = c.id " +
+                    "WHERE r.status = ? " +
+                    "ORDER BY r.id ASC";
+
+        try (Connection conn = ConexaoDAO.getConnection();
+            PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, status); // Ex: 'Pendente'
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Recurso r = new Recurso();
+                    r.setId(rs.getInt("id"));
+                    r.setTitulo(rs.getString("titulo"));
+                    r.setAutor(rs.getString("autor"));
+                    r.setIdUsuarioCadastro(rs.getInt("id_usuario_cadastro"));
+                    r.setTipoRecurso(rs.getString("tipo_recurso")); // NOVO
+                    r.setConteudo(rs.getString("conteudo_link_ou_base64")); // NOVO
+                    
+                    Categoria categoria = new Categoria();
+                    categoria.setId(rs.getInt("id_categoria"));
+                    categoria.setNome(rs.getString("nome_categoria"));
+                    r.setCategoria(categoria);
+                    
+                    recursos.add(r);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Erro ao listar recursos por status: " + e.getMessage());
+        }
+        return recursos;
+    }
+
 }
