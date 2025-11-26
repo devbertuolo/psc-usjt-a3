@@ -2,6 +2,7 @@ package iacibersec.gui;
 
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
@@ -13,9 +14,9 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTable;
 import javax.swing.JTextField;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingConstants;
 
 import iacibersec.dao.CategoriaDAO;
 import iacibersec.dao.RecursoDAO;
@@ -25,10 +26,10 @@ import iacibersec.models.Usuario;
 
 public class ListagemRecursosPanel extends JPanel {
 
-    private JTable tabelaRecursos;
-    private DefaultTableModel tableModel;
     private RecursoDAO recursoDAO;
     private Usuario usuarioLogado;
+    
+    private JPanel cardsContainer; 
     
     private JTextField txtBusca;
     private JComboBox<Categoria> cbFiltroCategoria;
@@ -45,10 +46,20 @@ public class ListagemRecursosPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
         add(criarPainelFiltros(), BorderLayout.NORTH);
-        add(criarPainelTabela(), BorderLayout.CENTER);
         
-        carregarTabelaRecursos(null, null);
-        adicionarAcaoAvaliacao();
+        // FIX: Inicializa o cardsContainer antes de usá-lo no JScrollPane
+        cardsContainer = new JPanel();
+        
+        JScrollPane scrollPane = new JScrollPane(cardsContainer);
+        scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        
+        add(scrollPane, BorderLayout.CENTER);
+        
+        carregarCardsRecursos(null, null);
+        
+        // Adiciona eventos de filtro
+        btnBuscar.addActionListener(e -> aplicarFiltros());
+        txtBusca.addActionListener(e -> aplicarFiltros());
     }
     
     private JPanel criarPainelFiltros() {
@@ -70,9 +81,6 @@ public class ListagemRecursosPanel extends JPanel {
         painel.add(cbFiltroCategoria);
         painel.add(btnBuscar);
         
-        btnBuscar.addActionListener(e -> aplicarFiltros());
-        txtBusca.addActionListener(e -> aplicarFiltros());
-        
         return painel;
     }
     
@@ -81,61 +89,49 @@ public class ListagemRecursosPanel extends JPanel {
         Categoria categoriaSelecionada = (Categoria) cbFiltroCategoria.getSelectedItem();
         Integer idCategoria = categoriaSelecionada != null ? categoriaSelecionada.getId() : 0;
         
-        carregarTabelaRecursos(textoBusca, idCategoria);
+        carregarCardsRecursos(textoBusca, idCategoria);
     }
     
-    private JScrollPane criarPainelTabela() {
-        String[] colunas = {"ID", "Título", "Autor/Fonte", "Categoria", "Nota Média", "Cadastrado Por ID"};
-        tableModel = new DefaultTableModel(colunas, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-        tabelaRecursos = new JTable(tableModel);
+    private void carregarCardsRecursos(String textoBusca, Integer idCategoria) {
+        cardsContainer.removeAll();
         
-        tabelaRecursos.getColumnModel().getColumn(0).setMaxWidth(50); 
-        tabelaRecursos.getColumnModel().getColumn(5).setMaxWidth(120); 
+        List<Recurso> recursos = recursoDAO.listarRecursosVerificadosComFiltros(textoBusca, idCategoria); 
+        
+        if (recursos.isEmpty()) {
+            cardsContainer.setLayout(new BorderLayout());
+            cardsContainer.add(new JLabel("Nenhum recurso encontrado ou verificado que corresponda aos filtros.", SwingConstants.CENTER), BorderLayout.CENTER);
+        } else {
+            int totalCards = recursos.size();
+            int numColunas = 3;
+            int numLinhas = (int) Math.ceil((double) totalCards / numColunas); 
+            
+            // Define o GridPanel que irá forçar 3 colunas com quebra de linha
+            JPanel gridPanel = new JPanel(new GridLayout(numLinhas, numColunas, 15, 15)); 
 
-        JScrollPane scrollPane = new JScrollPane(tabelaRecursos);
-        return scrollPane;
-    }
-    
-    private void carregarTabelaRecursos(String textoBusca, Integer idCategoria) {
-        tableModel.setRowCount(0); 
-        
-        List<Recurso> recursos = recursoDAO.listarComFiltros(textoBusca, idCategoria);
-        
-        for (Recurso r : recursos) {
-            tableModel.addRow(new Object[]{
-                r.getId(),
-                r.getTitulo(),
-                r.getAutor(),
-                r.getCategoria().getNome(),
-                String.format("%.1f", r.getNotaMedia()),
-                r.getIdUsuarioCadastro()
-            });
-        }
-    }
-    
-    private void adicionarAcaoAvaliacao() {
-        tabelaRecursos.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent evt) {
-                if (evt.getClickCount() == 2) {
-                    int linha = tabelaRecursos.getSelectedRow();
-                    if (linha != -1) {
-                        avaliarRecurso(linha);
+            for (Recurso r : recursos) {
+                RecursoCard card = new RecursoCard(r);
+                gridPanel.add(card);
+                
+                card.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent evt) {
+                        if (evt.getClickCount() == 2) {
+                            avaliarRecurso(r.getId(), r.getTitulo());
+                        }
                     }
-                }
+                });
             }
-        });
-    }
-
-    private void avaliarRecurso(int linha) {
-        int idRecurso = (int) tableModel.getValueAt(linha, 0);
-        String titulo = (String) tableModel.getValueAt(linha, 1);
+            
+            // Adiciona o gridPanel ao cardsContainer
+            cardsContainer.setLayout(new BorderLayout()); 
+            cardsContainer.add(gridPanel, BorderLayout.NORTH);
+        }
         
+        cardsContainer.revalidate();
+        cardsContainer.repaint();
+    }
+    
+    private void avaliarRecurso(int idRecurso, String titulo) {
         JComboBox<Integer> notas = new JComboBox<>(new Integer[]{1, 2, 3, 4, 5});
         notas.setSelectedItem(5);
 
@@ -147,7 +143,8 @@ public class ListagemRecursosPanel extends JPanel {
             
             if (recursoDAO.registrarAvaliacao(idRecurso, usuarioLogado.getId(), nota)) {
                 JOptionPane.showMessageDialog(this, "Avaliação registrada com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-                carregarTabelaRecursos(null, null);
+                // Recarrega a listagem com os filtros atuais (mantém o contexto)
+                aplicarFiltros(); 
             } else {
                 JOptionPane.showMessageDialog(this, "Falha ao registrar avaliação.", "Erro", JOptionPane.ERROR_MESSAGE);
             }

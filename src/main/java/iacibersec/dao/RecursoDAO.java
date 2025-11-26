@@ -33,10 +33,10 @@ public class RecursoDAO {
         }
     }
 
-    public List<Recurso> listarComFiltros(String textoBusca, Integer idCategoria) {
+    public List<Recurso> listarComFiltros(String textoBusca, Integer idCategoria, String statusFiltro) {
         List<Recurso> recursos = new ArrayList<>();
         
-        String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, r.id_categoria, r.id_usuario_cadastro, " +
+        String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, r.id_categoria, r.id_usuario_cadastro, r.tipo_recurso, r.conteudo_link_ou_base64, " +
                      "COALESCE(AVG(a.nota), 0) AS nota_media " +
                      "FROM Recursos r " +
                      "JOIN Categorias c ON r.id_categoria = c.id " +
@@ -44,13 +44,22 @@ public class RecursoDAO {
         
         List<Object> parametros = new ArrayList<>();
         boolean temWhere = false;
+        
+        // 1. FILTRO DE STATUS (Obrigatório)
+        if (statusFiltro != null && !statusFiltro.isEmpty()) {
+            sql += "WHERE r.status = ? ";
+            parametros.add(statusFiltro);
+            temWhere = true;
+        }
 
+        // 2. FILTRO DE CATEGORIA
         if (idCategoria != null && idCategoria > 0) {
-            sql += "WHERE r.id_categoria = ? ";
+            sql += (temWhere ? "AND " : "WHERE ") + "r.id_categoria = ? ";
             parametros.add(idCategoria);
             temWhere = true;
         }
 
+        // 3. FILTRO DE TEXTO
         if (textoBusca != null && !textoBusca.trim().isEmpty()) {
             sql += (temWhere ? "AND " : "WHERE ") + "(r.titulo LIKE ? OR r.autor LIKE ?) ";
             parametros.add("%" + textoBusca + "%"); 
@@ -58,7 +67,7 @@ public class RecursoDAO {
             temWhere = true;
         }
 
-        sql += "GROUP BY r.id, r.titulo, r.autor, c.nome, r.id_categoria, r.id_usuario_cadastro ";
+        sql += "GROUP BY r.id, r.titulo, r.autor, c.nome, r.id_categoria, r.id_usuario_cadastro, r.tipo_recurso, r.conteudo_link_ou_base64 ";
         sql += "ORDER BY r.titulo ASC";
         
         try (Connection conn = ConexaoDAO.getConnection();
@@ -80,6 +89,8 @@ public class RecursoDAO {
                     r.setAutor(rs.getString("autor"));
                     r.setIdCategoria(rs.getInt("id_categoria"));
                     r.setIdUsuarioCadastro(rs.getInt("id_usuario_cadastro"));
+                    r.setTipoRecurso(rs.getString("tipo_recurso"));
+                    r.setConteudo(rs.getString("conteudo_link_ou_base64"));
                     r.setNotaMedia(rs.getDouble("nota_media"));
                     
                     Categoria categoria = new Categoria();
@@ -92,52 +103,24 @@ public class RecursoDAO {
             }
         } catch (SQLException e) {
             System.err.println("Erro ao listar recursos com filtros: " + e.getMessage());
+            return new ArrayList<>(); 
         }
         return recursos;
     }
     
-    public List<Recurso> listarTopRecursosPorCategoria(int idCategoria, int limite) {
-        List<Recurso> recursos = new ArrayList<>();
-        
-        String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, " +
-                     "COALESCE(AVG(a.nota), 0) AS nota_media " +
-                     "FROM Recursos r " +
-                     "JOIN Categorias c ON r.id_categoria = c.id " +
-                     "LEFT JOIN Avaliacoes a ON r.id = a.id_recurso " +
-                     "WHERE r.id_categoria = ? " +
-                     "GROUP BY r.id, r.titulo, r.autor, c.nome " +
-                     "ORDER BY nota_media DESC, r.titulo ASC " +
-                     "LIMIT ?";
-
-        try (Connection conn = ConexaoDAO.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            stmt.setInt(1, idCategoria);
-            stmt.setInt(2, limite);
-            
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    Recurso r = new Recurso();
-                    r.setId(rs.getInt("id"));
-                    r.setTitulo(rs.getString("titulo"));
-                    r.setAutor(rs.getString("autor"));
-                    r.setNotaMedia(rs.getDouble("nota_media"));
-                    
-                    Categoria categoria = new Categoria();
-                    categoria.setNome(rs.getString("nome_categoria"));
-                    r.setCategoria(categoria);
-                    
-                    recursos.add(r);
-                }
-            }
-        } catch (SQLException e) {
-            System.err.println("Erro ao listar Top Recursos: " + e.getMessage());
-        }
-        return recursos;
+    // Método Wrapper para a Listagem Comum (busca apenas Verificados)
+    public List<Recurso> listarRecursosVerificadosComFiltros(String textoBusca, Integer idCategoria) {
+        return listarComFiltros(textoBusca, idCategoria, "Verificado");
     }
+    
+    // Método Wrapper para a Listagem de Admin (busca apenas Pendentes)
+    public List<Recurso> listarRecursosPendentes(String textoBusca, Integer idCategoria) {
+        return listarComFiltros(textoBusca, idCategoria, "Pendente");
+    }
+    
+    // ... (restante dos métodos registrarAvaliacao, atualizarStatus) ...
 
     public boolean registrarAvaliacao(int idRecurso, int idUsuario, int nota) {
-        
         String sql = "REPLACE INTO Avaliacoes (id_recurso, id_usuario, nota) VALUES (?, ?, ?)";
 
         try (Connection conn = ConexaoDAO.getConnection();
@@ -154,14 +137,14 @@ public class RecursoDAO {
             return false;
         }
     }
-
+    
     public boolean atualizarStatus(int idRecurso, String novoStatus) {
         String sql = "UPDATE Recursos SET status = ? WHERE id = ?";
         
         try (Connection conn = ConexaoDAO.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             
-            stmt.setString(1, novoStatus); // Ex: "Verificado" ou "Rejeitado"
+            stmt.setString(1, novoStatus);
             stmt.setInt(2, idRecurso);
             
             return stmt.executeUpdate() > 0;
@@ -172,41 +155,46 @@ public class RecursoDAO {
         }
     }
 
-    public List<Recurso> listarRecursosPorStatus(String status) {
-        List<Recurso> recursos = new ArrayList<>();
+    public List<Recurso> listarTopRecursosPorCategoria(int idCategoria, int limite) {
+    List<Recurso> recursos = new ArrayList<>();
+    
+    // A consulta busca recursos de uma categoria, ordenados pela nota média
+    String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, " +
+                 "COALESCE(AVG(a.nota), 0) AS nota_media " +
+                 "FROM Recursos r " +
+                 "JOIN Categorias c ON r.id_categoria = c.id " +
+                 "LEFT JOIN Avaliacoes a ON r.id = a.id_recurso " +
+                 "WHERE r.id_categoria = ? " +
+                 "GROUP BY r.id, r.titulo, r.autor, c.nome " +
+                 "ORDER BY nota_media DESC, r.titulo ASC " +
+                 "LIMIT ?"; // Limita o número de resultados
+
+    try (Connection conn = ConexaoDAO.getConnection();
+         PreparedStatement stmt = conn.prepareStatement(sql)) {
         
-        String sql = "SELECT r.id, r.titulo, r.autor, c.nome as nome_categoria, r.id_categoria, r.id_usuario_cadastro, r.tipo_recurso, r.conteudo_link_ou_base64 " +
-                    "FROM Recursos r JOIN Categorias c ON r.id_categoria = c.id " +
-                    "WHERE r.status = ? " +
-                    "ORDER BY r.id ASC";
-
-        try (Connection conn = ConexaoDAO.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            stmt.setString(1, status); // Ex: 'Pendente'
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    Recurso r = new Recurso();
-                    r.setId(rs.getInt("id"));
-                    r.setTitulo(rs.getString("titulo"));
-                    r.setAutor(rs.getString("autor"));
-                    r.setIdUsuarioCadastro(rs.getInt("id_usuario_cadastro"));
-                    r.setTipoRecurso(rs.getString("tipo_recurso")); // NOVO
-                    r.setConteudo(rs.getString("conteudo_link_ou_base64")); // NOVO
-                    
-                    Categoria categoria = new Categoria();
-                    categoria.setId(rs.getInt("id_categoria"));
-                    categoria.setNome(rs.getString("nome_categoria"));
-                    r.setCategoria(categoria);
-                    
-                    recursos.add(r);
-                }
+        stmt.setInt(1, idCategoria);
+        stmt.setInt(2, limite);
+        
+        try (ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                Recurso r = new Recurso();
+                r.setId(rs.getInt("id"));
+                r.setTitulo(rs.getString("titulo"));
+                r.setAutor(rs.getString("autor"));
+                r.setNotaMedia(rs.getDouble("nota_media"));
+                
+                Categoria categoria = new Categoria();
+                categoria.setNome(rs.getString("nome_categoria"));
+                r.setCategoria(categoria);
+                
+                recursos.add(r);
             }
-        } catch (SQLException e) {
-            System.err.println("Erro ao listar recursos por status: " + e.getMessage());
         }
-        return recursos;
+    } catch (SQLException e) {
+        System.err.println("Erro ao listar Top Recursos: " + e.getMessage());
+        return new ArrayList<>(); // Retorna lista vazia em caso de erro
     }
+    return recursos;
+}
 
 }

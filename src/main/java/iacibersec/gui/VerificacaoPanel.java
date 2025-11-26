@@ -60,7 +60,8 @@ public class VerificacaoPanel extends JPanel {
     
     private void carregarTabelaPendentes() {
         tableModel.setRowCount(0);
-        List<Recurso> pendentes = recursoDAO.listarRecursosPorStatus("Pendente"); 
+        // Chamada corrigida para buscar apenas Pendentes
+        List<Recurso> pendentes = recursoDAO.listarRecursosPendentes(null, null); 
         
         for (Recurso r : pendentes) {
             tableModel.addRow(new Object[]{
@@ -111,6 +112,5 @@ public class VerificacaoPanel extends JPanel {
             "Conteúdo/Link:\n" + conteudo, 
             "Visualizar Conteúdo", 
             JOptionPane.PLAIN_MESSAGE);
-        
     }
 }
